@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Respond to keyboard/remote and light leds in response
 import RPi.GPIO as GPIO
+import json
 import time
 import signal
 from xbox360controller import Xbox360Controller 
@@ -14,12 +15,28 @@ PIN_in2 = 19
 PIN_in3 = 17
 PIN_in4 = 4
 
-DIVE_THRESHOLD = -0.2			
+REVERSE = 0
+FORWARD = 1
+global leftMotor
+global rightMotor
 
+
+
+DIVE_THRESHOLD = -0.2			
+class CommandSet (object):
+    def __init__(self, name):
+        self.name = name
+        
 def dispatchCommand(command):
+	#~ jsonData = '{"name": "Frank", "age": 39}'
+	#~ jsonToPython = json.loads(jsonData)
+	#~ mycmd = CommandSet(name='YellowCmd',ctype='info')
 	print ('Command {0}'.format(command))
 	
 def on_button_pressed(button):
+	global leftMotor
+	global rightMotor
+	commandSet = {'type': 'info'}
 	dispatchCommand('Button {0} was pressed'.format(button.name))
 	if button.name == 'button_mode': 
 		raise SystemExit('Mode Button Pressed')
@@ -32,11 +49,16 @@ def on_button_pressed(button):
 		GPIO.output(PIN_verticle, GPIO.HIGH)
 		
 	if button.name == 'button_trigger_l':
+		leftMotor = REVERSE
 		controller.set_led(Xbox360Controller.LED_BOTTOM_LEFT_BLINK_ON)
 	if button.name == 'button_trigger_r':
+		rightMotor = REVERSE
+		print ('Reverse Motor {0}'.format(rightMotor))
 		controller.set_led(Xbox360Controller.LED_BOTTOM_RIGHT_BLINK_ON)
 		
 def on_button_released(button):
+	global leftMotor
+	global rightMotor
 	dispatchCommand('Button {0} was released'.format(button.name))
 	if button.name == 'button_mode': 
 		raise SystemExit('Mode Button Pressed')
@@ -49,38 +71,48 @@ def on_button_released(button):
 		GPIO.output(PIN_verticle, GPIO.LOW)
 
 	if button.name == 'button_trigger_l':
+		leftMotor = FORWARD
 		controller.set_led(Xbox360Controller.LED_OFF)
 	if button.name == 'button_trigger_r':
+		#~ print ('about Change rightMotor direction {0}'.format(rightMotor))
+		rightMotor = FORWARD
+		print ('changed Change rightMotor direction {0}'.format(rightMotor))
 		controller.set_led(Xbox360Controller.LED_OFF)
 
 def on_trigger_move(raxis):
+	global leftMotor
+	global rightMotor
 	dispatchCommand('Axis {0} moved to {1}'.format(raxis.name, raxis.value))
 	if raxis.name == 'trigger_r' and raxis.value > 0:
 		controller.set_led(Xbox360Controller.LED_TOP_RIGHT_ON)
-		#~ GPIO.output(PIN_StarBoard, GPIO.HIGH)
 		portled.start(round(raxis.value * 100))
-		motorAFwd.start(round(raxis.value * 100))
+		print ('Right Motor {0} '.format(rightMotor))
+		if (rightMotor == FORWARD):
+			motorABack.stop()
+			motorAFwd.start(round(raxis.value * 100))
+		else: 
+			motorAFwd.stop()
+			motorABack.start(round(raxis.value * 100))
 
 	if raxis.name == 'trigger_r' and raxis.value == 0:
 		controller.set_led(Xbox360Controller.LED_OFF)
-		#~ GPIO.output(PIN_StarBoard, GPIO.LOW)
 		portled.start(round(raxis.value * 100))
-		#~ motorAFwd.start(round(raxis.value * 100))
-		print ('STOP')
 		motorAFwd.stop()
 	
 	if raxis.name == 'trigger_l' and raxis.value > 0:
 		controller.set_led(Xbox360Controller.LED_TOP_LEFT_ON)
-		#~ GPIO.output(PIN_Port, GPIO.HIGH)
 		starboardled.start(round(raxis.value * 100))
-		motorBFwd.start(round(raxis.value * 100))
-
+		if (leftMotor == FORWARD):
+			motorBBack.stop()
+			motorBFwd.start(round(raxis.value * 100))
+		else:
+			motorBFwd.stop()
+			motorBBack.start(round(raxis.value * 100))
 
 	if raxis.name == 'trigger_l' and raxis.value == 0:
 		controller.set_led(Xbox360Controller.LED_OFF)
-		#~ GPIO.output(PIN_Port, GPIO.LOW)
-		motorBFwd.start(round(raxis.value * 100))
-		starboardled.start(round(raxis.value * 100))		
+		motorBFwd.stop()
+		starboardled.stop()		
 
 def on_axis_moved(axis):
 	dispatchCommand('Axis {0} moved to {1} {2}'.format(axis.name, axis.x , axis.y))
@@ -90,6 +122,8 @@ def on_axis_moved(axis):
 	if axis.name == 'axis_l' and axis.y >= DIVE_THRESHOLD:
 		# close to center (turn off dive led)
 		GPIO.output(PIN_verticle, GPIO.LOW)
+
+		
 try:
 	GPIO.setmode(GPIO.BCM)
 	GPIO.setup(PIN_StarBoard, GPIO.OUT)
@@ -107,8 +141,8 @@ try:
 	motorABack = GPIO.PWM(PIN_in2, 100)
 	motorBFwd = GPIO.PWM(PIN_in3, 100)
 	motorBBack = GPIO.PWM(PIN_in4, 100)
-
-	
+	leftMotor = FORWARD
+	rightMotor = FORWARD
 
 	#~ GPIO.output(PIN_StarBoard, True)
 	#~ GPIO.output(PIN_Port, True)
@@ -170,3 +204,5 @@ except KeyboardInterrupt:
 	pass
 print ('Start GPIO Cleanup')
 GPIO.cleanup()
+
+
